@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hospital OS Algorithm Visualizer</title>
+<style>
+:root{--bg:#f3f6f6;--card:#fff;--tx:#14262b;--mu:#587078;--bd:#d3dfe0;--ac:#0a6c74;--ac2:#e5f2f2;--bad:#b3261e;--ok:#1b7f45;--warn:#b8780a;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1a1d;--card:#16262a;--tx:#e3eff0;--mu:#8fa8ad;--bd:#27403f;--ac:#4cc9c9;--ac2:#1b3b3d;--bad:#ff8a80;--ok:#5fd68f;--warn:#f2b84b;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.5 Georgia,"Times New Roman",serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+header{padding:20px 16px 8px;max-width:960px;margin:auto}
+h1{font-size:1.5rem;margin:0 0 4px}
+header p{margin:0;color:var(--mu);max-width:70ch}
+nav{display:flex;gap:6px;flex-wrap:wrap;max-width:960px;margin:12px auto;padding:0 16px}
+nav button{font:inherit;padding:8px 14px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:6px;cursor:pointer}
+nav button[aria-selected=true]{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+main{max-width:960px;margin:auto;padding:0 16px 40px}
+section{display:none;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:16px}
+section.on{display:block}
+h2{font-size:1.15rem;margin:0 0 4px}
+.note{color:var(--mu);margin:0 0 12px;max-width:75ch}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+button.go,select,input[type=text]{font:inherit;padding:6px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+button.go{background:var(--ac);color:var(--bg);border-color:var(--ac);cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;margin:6px 0}
+th,td{border:1px solid var(--bd);padding:4px 8px;text-align:center}
+th{background:var(--ac2);font-weight:600}
+td input{width:54px;font:inherit;text-align:center;background:transparent;color:var(--tx);border:0}
+.gantt{display:flex;margin:8px 0 22px}
+.blk{position:relative;height:38px;min-width:28px;display:flex;align-items:center;justify-content:center;background:var(--ac);color:var(--bg);border-right:2px solid var(--card);font-size:.8rem}
+.blk.idle{background:var(--bd);color:var(--mu)}
+.blk i{position:absolute;bottom:-18px;left:0;font-style:normal;color:var(--mu);font-size:.75rem}
+.slots{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.slot{width:92px;height:54px;border:2px dashed var(--bd);border-radius:6px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;padding:2px}
+.slot.f{border-style:solid;border-color:var(--ac);background:var(--ac2)}
+.sem{display:flex;gap:16px;flex-wrap:wrap}
+.sem b{color:var(--ac)}
+#log{max-height:170px;overflow:auto;border:1px solid var(--bd);border-radius:6px;padding:6px 10px;font-size:.85rem;margin-top:8px}
+#log div{padding:1px 0}
+.bad{color:var(--bad)}.ok{color:var(--ok)}.warn{color:var(--warn)}
+.part{margin:8px 0}
+.bar{height:30px;border:1px solid var(--bd);border-radius:4px;overflow:hidden;display:flex}
+.used{background:var(--ac);color:var(--bg);display:flex;align-items:center;padding-left:6px;font-size:.8rem;white-space:nowrap;overflow:hidden}
+.free{flex:1;background:repeating-linear-gradient(45deg,var(--ac2),var(--ac2) 6px,transparent 6px,transparent 12px)}
+.sum{margin-top:10px;padding:10px;background:var(--ac2);border-radius:6px}
+</style></head><body>
+<header><h1>Hospital Management and Emergency Care: OS Visualizer</h1>
+<p>One hospital scenario, four OS mechanisms. Patient requests are produced into a bounded buffer, scheduled by priority, checked for safe resource allocation with Banker’s Algorithm, and given memory partitions.</p></header>
+<nav role="tablist" id="tabs"></nav>
+<main>
+<section id="s0"><h2>CPU scheduling</h2>
+<p class="note">Lower priority number means more urgent. Emergency Admission gets priority 1. Edit any value, pick an algorithm (FCFS, SJF, SRTF, Priority or Round Robin), then run.</p>
+<div class="row"><label>Algorithm <select id="alg" onchange="runSch()"><option value="pr">Priority (non-preemptive)</option><option value="fc">FCFS</option><option value="sj">SJF (non-preemptive)</option><option value="sr">SRTF (preemptive SJF)</option><option value="rr">Round Robin</option></select></label><label id="ql" hidden>Time quantum <input type="number" id="q" min="1" value="2" style="width:56px"></label><button class="go" onclick="runSch()">Run</button></div>
+<div class="scroll"><table id="pt"></table></div><div class="scroll"><div id="gantt" class="gantt"></div></div><div id="sres"></div></section>
+
+<section id="s1"><h2>Producer–consumer (bounded buffer)</h2>
+<p class="note">Producers: patient registration and lab results arriving. Consumers: diagnostic and processing tasks. Semaphores <b>empty</b> and <b>full</b> count slots; <b>mutex</b> guards the buffer.</p>
+<div class="row"><label>Buffer size <select id="bn" onchange="pcReset()"><option>3</option><option selected>5</option><option>8</option></select></label>
+<button class="go" onclick="produce()">Produce</button><button class="go" onclick="consume()">Consume</button><button class="go" onclick="auto()" id="ab">Auto run</button><button class="go" onclick="pcReset()">Reset</button></div>
+<div class="sem" id="sem"></div><div class="slots" id="slots"></div><div id="log" aria-live="polite"></div></section>
+
+<section id="s2"><h2>Deadlock avoidance (Banker’s Algorithm)</h2>
+<p class="note">Resources: Imaging equipment, Printers, Database connections. Edit Allocation, Maximum and Available, then check the state. The request form tests whether granting a request keeps the system safe.</p>
+<div class="scroll" id="bk"></div><div class="row"><button class="go" onclick="runBank()">Check safe state</button></div><div id="bout"></div>
+<h2 style="margin-top:16px">Resource request</h2>
+<div class="row"><select id="rp"></select><label>Imaging <input type="text" id="r0" value="1" size="2"></label><label>Printer <input type="text" id="r1" value="0" size="2"></label><label>Database <input type="text" id="r2" value="2" size="2"></label><button class="go" onclick="reqBank()">Test request</button></div><div id="rout"></div></section>
+
+<section id="s3"><h2>Memory management</h2>
+<p class="note">Fixed partitions (KB) and task sizes (KB), comma-separated. Compare First, Best and Worst Fit and see leftover space inside partitions.</p>
+<div class="row"><label>Partitions <input type="text" id="mp" value="100,500,200,300,600" size="22"></label><label>Tasks <input type="text" id="mr" value="212,417,112,426" size="18"></label>
+<select id="ma"><option value="first">First Fit</option><option value="best">Best Fit</option><option value="worst">Worst Fit</option></select><button class="go" onclick="runMem()">Allocate</button></div>
+<div id="mout"></div></section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const TABS=["CPU scheduling","Producer–consumer","Banker’s Algorithm","Memory management"];
+$("#tabs").innerHTML=TABS.map((t,i)=>`<button role="tab" aria-selected="${i==0}" onclick="tab(${i})">${t}</button>`).join("");
+function tab(i){document.querySelectorAll("section").forEach((s,j)=>s.classList.toggle("on",i==j));document.querySelectorAll("nav button").forEach((b,j)=>b.setAttribute("aria-selected",i==j))}
+tab(0);
+const inp=v=>`<td><input type="number" min="0" value="${v}"></td>`;
+const rdg=id=>[...document.querySelectorAll(`#${id} tr`)].slice(1).map(tr=>[...tr.querySelectorAll("input")].map(i=>+i.value));
+/* ---------- CPU scheduling ---------- */
+const NAMES=["Emergency Admission","Lab Report","Pharmacy Request","Imaging (MRI/X-ray)","Patient Registration"];
+const PD=[[0,4,1],[1,6,3],[2,3,4],[3,5,2],[4,2,5]];
+$("#pt").innerHTML="<tr><th>Task</th><th>Arrival</th><th>Burst</th><th>Priority</th></tr>"+PD.map((r,i)=>`<tr><th>P${i} ${NAMES[i]}</th>${r.map(inp).join("")}</tr>`).join("");
+function runSch(){
+ const a=$("#alg").value,q=Math.max(1,+$("#q").value||2),d=rdg("pt"),ps=d.map((r,i)=>({i,at:r[0],bt:r[1],pr:r[2],rem:r[1],ct:0})),seg=[];
+ $("#ql").hidden=a!="rr";
+ const push=(i,s,e)=>{const l=seg[seg.length-1];if(l&&l.i==i&&l.e==s)l.e=e;else seg.push({i,s,e})};
+ const nextAt=()=>Math.min(...ps.filter(p=>p.rem>0).map(p=>p.at));
+ let t=0,left=ps.length;
+ if(a=="rr"){
+  const Q=[],seen=new Set();
+  const adm=()=>ps.filter(p=>p.at<=t&&!seen.has(p.i)).sort((x,y)=>x.at-y.at).forEach(p=>{seen.add(p.i);Q.push(p)});
+  adm();
+  while(left){
+   if(!Q.length){t=nextAt();adm();continue}
+   const p=Q.shift(),r=Math.min(q,p.rem);push(p.i,t,t+r);t+=r;p.rem-=r;adm();
+   if(p.rem>0)Q.push(p);else{p.ct=t;left--}
+  }
+ }else if(a=="sr"){
+  while(left){
+   const rd=ps.filter(p=>p.rem>0&&p.at<=t).sort((x,y)=>x.rem-y.rem||x.at-y.at);
+   if(!rd.length){t=nextAt();continue}
+   const p=rd[0];push(p.i,t,t+1);t++;p.rem--;if(!p.rem){p.ct=t;left--}
+  }
+ }else{
+  const key=p=>a=="fc"?p.at:a=="sj"?p.bt:p.pr;
+  while(left){
+   const rd=ps.filter(p=>p.rem>0&&p.at<=t).sort((x,y)=>key(x)-key(y)||x.at-y.at);
+   if(!rd.length){t=nextAt();continue}
+   const p=rd[0];push(p.i,t,t+p.bt);t+=p.bt;p.ct=t;p.rem=0;left--;
+  }
+ }
+ let g="",pe=0;
+ seg.forEach(s=>{if(s.s>pe)g+=`<div class="blk idle" style="width:${(s.s-pe)*30}px"><i>${pe}</i>idle</div>`;g+=`<div class="blk" style="width:${(s.e-s.s)*30}px"><i>${s.s}</i>P${s.i}</div>`;pe=s.e});
+ $("#gantt").innerHTML=g+`<span style="margin:22px 0 0 6px;color:var(--mu);font-size:.75rem">${pe}</span>`;
+ ps.forEach(p=>{p.tat=p.ct-p.at;p.wt=p.tat-p.bt});
+ const n=ps.length,sum=k=>ps.reduce((s,p)=>s+p[k],0),busy=sum("bt"),start=Math.min(...ps.map(p=>p.at));
+ $("#sres").innerHTML=`<div class="scroll"><table><tr><th>Process</th><th>Arrival Time (AT)</th><th>Burst Time (BT)</th><th>Priority</th><th>Completion Time (CT)</th><th>Turnaround Time (TAT = CT − AT)</th><th>Waiting Time (WT = TAT − BT)</th></tr>${ps.map(p=>`<tr><th>P${p.i} ${NAMES[p.i]||""}</th><td>${p.at}</td><td>${p.bt}</td><td>${p.pr}</td><td>${p.ct}</td><td>${p.tat}</td><td>${p.wt}</td></tr>`).join("")}<tr><th>Total / Average</th><td></td><td>${busy}</td><td></td><td></td><td>${sum("tat")} / ${(sum("tat")/n).toFixed(2)}</td><td>${sum("wt")} / ${(sum("wt")/n).toFixed(2)}</td></tr></table></div><div class="sum">Average waiting time: <b>${(sum("wt")/n).toFixed(2)}</b> &nbsp; Average turnaround time: <b>${(sum("tat")/n).toFixed(2)}</b><br>Schedule length: <b>${pe-start}</b> &nbsp; CPU utilization: <b>${(busy/(pe-start)*100).toFixed(1)}%</b> &nbsp; Throughput: <b>${(n/(pe-start)).toFixed(3)}</b> processes per unit time &nbsp; Context switches: <b>${seg.length-1}</b></div>`;
+}
+runSch();
+/* ---------- Producer-consumer ---------- */
+let S,timer=null;const ITEMS=["Registration","Lab result","Imaging scan","Pharmacy order","ER alert"];
+function pcReset(){clearInterval(timer);timer=null;$("#ab").textContent="Auto run";S={N:+$("#bn").value,buf:[],id:0,mutex:1};$("#log").innerHTML="";pcDraw()}
+function say(m,c){$("#log").insertAdjacentHTML("afterbegin",`<div class="${c||""}">${m}</div>`)}
+function pcDraw(){
+ const e=S.N-S.buf.length;
+ $("#sem").innerHTML=`<span>empty = <b>${e}</b></span><span>full = <b>${S.buf.length}</b></span><span>mutex = <b>${S.mutex}</b></span>`;
+ $("#slots").innerHTML=Array.from({length:S.N},(_,i)=>`<div class="slot ${S.buf[i]?"f":""}">${S.buf[i]||"empty"}</div>`).join("");
+}
+function produce(){
+ if(S.buf.length==S.N){say("Producer blocked: wait(empty) cannot proceed, buffer is full.","bad");return}
+ const it=ITEMS[S.id%5]+" #"+(++S.id);
+ say(`Producer: wait(empty), wait(mutex), insert <b>${it}</b>, signal(mutex), signal(full)`,"ok");S.buf.push(it);pcDraw()}
+function consume(){
+ if(!S.buf.length){say("Consumer blocked: wait(full) cannot proceed, buffer is empty.","bad");return}
+ const it=S.buf.shift();
+ say(`Consumer: wait(full), wait(mutex), remove <b>${it}</b>, signal(mutex), signal(empty)`,"warn");pcDraw()}
+function auto(){
+ if(timer){clearInterval(timer);timer=null;$("#ab").textContent="Auto run";return}
+ $("#ab").textContent="Stop";timer=setInterval(()=>Math.random()<.6?produce():consume(),700)}
+pcReset();
+/* ---------- Banker's ---------- */
+const RN=["Imaging","Printer","Database"],PN=["ER","Lab","Pharm","Img","Reg"];
+const AL=[[0,1,0],[2,0,0],[3,0,2],[2,1,1],[0,0,2]],MX=[[7,5,3],[3,2,2],[9,0,2],[2,2,2],[4,3,3]],AV=[[3,3,2]];
+const grid=(id,t,d,rows)=>`<div style="display:inline-block;margin-right:14px"><b>${t}</b><table id="${id}"><tr><th></th>${RN.map(r=>`<th>${r}</th>`).join("")}</tr>${d.map((r,i)=>`<tr><th>${rows[i]}</th>${r.map(inp).join("")}</tr>`).join("")}</table></div>`;
+$("#bk").innerHTML=grid("al","Allocation",AL,PN)+grid("mx","Maximum",MX,PN)+grid("av","Available",AV,["Free"]);
+$("#rp").innerHTML=PN.map((p,i)=>`<option value="${i}">${p}</option>`).join("");
+const le=(a,b)=>a.every((x,i)=>x<=b[i]),add=(a,b)=>a.map((x,i)=>x+b[i]);
+function safety(al,need,av){
+ let w=[...av],fin=al.map(()=>0),seq=[],tr=[],prog=1;
+ while(prog){prog=0;for(let i=0;i<al.length;i++)if(!fin[i]&&le(need[i],w)){tr.push(`${PN[i]}: Need [${need[i]}] ≤ Work [${w}], runs and releases. Work = [${add(w,al[i])}]`);w=add(w,al[i]);fin[i]=1;seq.push(PN[i]);prog=1}}
+ return{ok:fin.every(x=>x),seq,tr}}
+function state(){const al=rdg("al"),mx=rdg("mx"),av=rdg("av")[0];return{al,mx,av,need:mx.map((r,i)=>r.map((x,j)=>x-al[i][j]))}}
+function runBank(){
+ const{al,av,need}=state(),r=safety(al,need,av);
+ $("#bout").innerHTML=`<b>Need = Maximum − Allocation</b><table><tr><th></th>${RN.map(x=>`<th>${x}</th>`).join("")}</tr>${need.map((r,i)=>`<tr><th>${PN[i]}</th>${r.map(v=>`<td>${v}</td>`).join("")}</tr>`).join("")}</table>`+
+ r.tr.map(t=>`<div>${t}</div>`).join("")+`<div class="sum ${r.ok?"ok":"bad"}">${r.ok?"Safe state. Safe sequence: <b>"+r.seq.join(" → ")+"</b>":"Unsafe state: no process can be guaranteed to finish."}</div>`}
+function reqBank(){
+ const{al,av,need}=state(),i=+$("#rp").value,rq=[0,1,2].map(k=>+$("#r"+k).value||0);let m;
+ if(!le(rq,need[i]))m=`<span class="bad">Denied: ${PN[i]} asked for more than its declared maximum claim.</span>`;
+ else if(!le(rq,av))m=`<span class="warn">${PN[i]} must wait: resources not available right now.</span>`;
+ else{const a2=al.map(r=>[...r]),n2=need.map(r=>[...r]);a2[i]=add(a2[i],rq);n2[i]=n2[i].map((x,k)=>x-rq[k]);
+  const r=safety(a2,n2,av.map((x,k)=>x-rq[k]));
+  m=r.ok?`<span class="ok">Granted: state stays safe. Sequence: <b>${r.seq.join(" → ")}</b></span>`:`<span class="bad">Denied: granting leaves the system unsafe (possible deadlock).</span>`}
+ $("#rout").innerHTML=`<div class="sum">${m}</div>`}
+runBank();
+/* ---------- Memory ---------- */
+const TN=["Lab Report","Imaging","Registration","Emergency Admission"];
+function runMem(){
+ const P=$("#mp").value.split(",").map(Number).filter(x=>x>0),R=$("#mr").value.split(",").map(Number).filter(x=>x>0),alg=$("#ma").value;
+ const u=P.map(()=>-1),fail=[];
+ R.forEach((s,i)=>{let k=-1;P.forEach((p,j)=>{if(u[j]>=0||p<s)return;if(k<0||(alg=="best"&&p<P[k])||(alg=="worst"&&p>P[k]))k=j});k<0?fail.push(i):u[k]=i});
+ let internal=0,free=0,big=0;
+ const bars=P.map((p,j)=>{const t=u[j],s=t>=0?R[t]:0;internal+=p-s;if(t<0){free+=p;big=Math.max(big,p)}
+  return`<div class="part">Partition ${j+1}: ${p} KB<div class="bar"><div class="used" style="width:${s/p*100}%">${t>=0?(TN[t]||"Task "+(t+1))+" "+s:""}</div><div class="free"></div></div><small style="color:var(--mu)">${t>=0?"Internal fragmentation: "+(p-s)+" KB":"Unused"}</small></div>`}).join("");
+ const left=fail.map(i=>`${TN[i]||"Task "+(i+1)} (${R[i]} KB)`);
+ const ext=fail.some(i=>R[i]<=internal);
+ $("#mout").innerHTML=bars+`<div class="sum">Allocated ${R.length-fail.length} of ${R.length} tasks. Total unused space: <b>${internal} KB</b> (inside partitions: ${internal-free} KB, whole free partitions: ${free} KB, largest free block: ${big} KB).<br>${fail.length?`<span class="bad">Not allocated: ${left.join(", ")}.</span>${ext?" The total free space is enough but it is split across partitions: this is external fragmentation.":""}`:`<span class="ok">All tasks allocated.</span>`}</div>`}
+runMem();
+</script></body></html>
